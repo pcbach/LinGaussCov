@@ -73,3 +73,32 @@ def represent(d, precision, eps, Z, Y):
 def is_pos_def(x):
     return np.all(np.linalg.eigvals(x) > 0)
 
+class LGC:
+    def __init__(self,precision,epsilon,dimension,Z):
+        self.h = precision
+        self.eps = epsilon
+        self.dim = dimension
+        self.constraints = []
+        self.Y = cp.Variable((self.dim,self.dim))
+        self.t = cp.Variable()
+        self.Z = Z
+        self.I = np.eye(self.dim)
+
+    def setup_constraint(self):
+        self.constraints += represent(self.dim, self.h, self.eps, self.Z, self.Y)
+        self.constraints += [self.Z << 2*self.I]
+        self.constraints += [self.Z >> self.eps*self.I]
+        self.constraints += [cp.trace(self.Y) <= self.t]
+
+    def add_constraint(self, constraints):
+        self.constraints += constraints
+
+    def solve(self, *args):
+        self.setup_constraint()
+        if args:
+            solver = args[0]
+        else:
+            solver = cp.SCS
+        prob = cp.Problem(cp.Minimize(self.t),self.constraints)
+        prob.solve(solver = solver)
+        return self.t.value, self.Z.value
