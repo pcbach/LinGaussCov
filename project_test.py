@@ -45,12 +45,15 @@ data = np.random.multivariate_normal(mean, covariance, n)
 precision = 1e-4
 eps = 5e-3
 Z = cp.Variable((d,d), PSD = True)
+
 sigma = ps.Sn(data)
 sqrt_sigma = sp.linalg.sqrtm(sigma)
 
 
 Problem = ps.LGC(precision,eps,d,Z)
+
 Problem.add_constraint([(sqrt_sigma @ Problem.Z @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
+
 ans = Problem.solve(cp.MOSEK)
 
 z = ans[1]
