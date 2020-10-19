@@ -11,7 +11,7 @@ import ps
 
 np.set_printoptions(precision = 3)
 d = 4
-n = 5000
+n = 50
 start_total = time.time()
 mean = np.zeros(d)
 covariance = np.zeros((d,d))
@@ -26,7 +26,7 @@ while True:
             if i == j:
                 covariance[i,j] = 1.0
             elif i < j:
-                covariance[i,j] = np.random.randint(1,50)/50.0
+                covariance[i,j] = np.random.randint(-50,50)/100.0
             else:
                 covariance[i,j] = covariance[j,i]
     if ps.is_pos_def(covariance):
@@ -47,6 +47,8 @@ eps = 5e-3
 Z = cp.Variable((d,d), PSD = True)
 
 sigma = ps.Sn(data)
+D = np.sqrt(np.diag(sigma))
+scale = np.linalg.inv(np.diag(D))
 sqrt_sigma = sp.linalg.sqrtm(sigma)
 
 
@@ -60,7 +62,7 @@ z = ans[1]
 t = ans[0]
 
 print("Z = \n",z)
-print("eig = \n",np.linalg.eig(z)[0])
+print("sigma = \n",scale @ sigma @ scale)
 print("SZS = \n",sqrt_sigma @ np.array(z) @ sqrt_sigma)
 
 print("t = \n",t)

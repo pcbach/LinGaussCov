@@ -10,20 +10,26 @@ Original file is located at
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from matplotlib import animation
 #!pip install cvxpy
 import cvxpy as cp
+np.set_printoptions(precision = 3)
 
 def f(x):
     return np.log(x) + 1/x
 
-def error(xa,xb,xc,xd):
+def lagrange_interpolate(xa,xb,xc,xd):
     M = np.array([[xa**3, xa**2, xa, 1],
                   [xb**3, xb**2, xb, 1],
                   [xc**3, xc**2, xc, 1],
                   [xd**3, xd**2, xd, 1]])
     B = np.array([f(xa),f(xb),f(xc),f(xd)])
     A = np.linalg.solve(M, B)
+    return A
+
+def error(xa,xb,xc,xd):
+    A = lagrange_interpolate(xa,xb,xc,xd)
     X = np.roots([-3*A[0],-2*A[1],-A[2],1,-1])
     X = X[X>0]
     error = abs(f(X) - (A[0]*X**3 + A[1]*X**2 + A[2]*X + A[3])) 
@@ -74,12 +80,25 @@ def approximate(precision,eps):
         next = search(curr,eps,precision)
         xbc = error2(curr, next)
         c = [curr, xbc[2], xbc[1], next]
-        #print(c)
+        print(c)
         lines.append(c)
         curr = next
     return np.array(lines)
 
-curves = approximate(1e-4,5e-3)
-np.set_printoptions(precision = 8)
-print(curves)
-print(len(curves))
+precision = 1e-5
+eps = 1e-4
+
+file = 'cubic - ' + str(precision) + '-' + str(eps) + '.npy'
+if os.path.isfile(os.path.join('preset', file)):
+    coeff  = np.load(os.path.join('preset', file))
+else:
+    curves = approximate(precision,eps)
+    coeff = np.zeros((len(curves),4))
+    for i in range(len(curves)):
+        coeff[i,:] = lagrange_interpolate(curves[i][0],curves[i][1],curves[i][2],curves[i][3])
+    np.save(os.path.join('preset', file), coeff)
+
+
+
+print(coeff)
+print(len(coeff))
