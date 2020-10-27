@@ -8,9 +8,10 @@ import cvxpy as cp
 import scipy as sp
 import time
 import ps
+import os
 
-np.set_printoptions(precision = 3)
-d = 4
+np.set_printoptions(precision = 3, suppress=True)
+d = 3
 n = 50
 start_total = time.time()
 mean = np.zeros(d)
@@ -44,29 +45,47 @@ data = np.random.multivariate_normal(mean, covariance, n)
 
 precision = 1e-4
 eps = 5e-3
-Z = cp.Variable((d,d), PSD = True)
+X = cp.Variable((d,d), PSD = True)
 
 sigma = ps.Sn(data)
-D = np.sqrt(np.diag(sigma))
-scale = np.linalg.inv(np.diag(D))
 sqrt_sigma = sp.linalg.sqrtm(sigma)
 
+start = time.time()
+Problem1 = ps.LGC(X,d,precision = 1e-4, epsilon = 1e-3,estimationType = 'Cubic')
+Problem1.add_constraint([(sqrt_sigma @ Problem1.X @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
+ans1 = Problem1.solve(cp.MOSEK, verbose = True)
+z1 = ans1[1]
+t1 = ans1[0]
+end = time.time()
+cubicTime = end-start
 
-Problem = ps.LGC(precision,eps,d,Z)
+start = time.time()
+Problem2 = ps.LGC(X,d,precision = 1e-4, epsilon = 1e-3,estimationType = 'Linear')
+Problem2.add_constraint([(sqrt_sigma @ Problem2.X @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
+ans2 = Problem2.solve(cp.MOSEK, verbose = True)
+z2 = ans2[1]
+t2 = ans2[0]
+end = time.time()
+linearTime = end-start
 
-Problem.add_constraint([(sqrt_sigma @ Problem.Z @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
+cubicParserError = sqrt_sigma @ np.array(z1) @ sqrt_sigma - covariance
+linearParserError = sqrt_sigma @ np.array(z2) @ sqrt_sigma - covariance
 
-ans = Problem.solve(cp.MOSEK)
+start = time.time()
+D = np.sqrt(np.diag(sigma))
+scale = np.linalg.inv(np.diag(D))
+sampleError = scale @ sigma @ scale - covariance
+end = time.time()
+sampleTime = end-start
 
-z = ans[1]
-t = ans[0]
-
-print("Z = \n",z)
-print("sigma = \n",scale @ sigma @ scale)
-print("SZS = \n",sqrt_sigma @ np.array(z) @ sqrt_sigma)
-
-print("t = \n",t)
-
-print("error = \n", sqrt_sigma @ np.array(z) @ sqrt_sigma - covariance)
+print("┏━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓")
+print("┃Estimator┃ Sum Error ┃ Max Error ┃    Time   ┃")
+print("┣━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━┫")
+print("┃  Cubic  ┃  {:7.3f}  ┃  {:7.3f}  ┃  {:7.3f}  ┃".format( float(np.sum(abs(cubicParserError))),np.max(abs(cubicParserError)),cubicTime))
+print("┣━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━┫")
+print("┃  Linear ┃  {:7.3f}  ┃  {:7.3f}  ┃  {:7.3f}  ┃".format( float(np.sum(abs(linearParserError))),np.max(abs(linearParserError)),linearTime))
+print("┣━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━━━━┫")
+print("┃  Sample ┃  {:7.3f}  ┃  {:7.3f}  ┃  {:7.3f}  ┃".format( float(np.sum(abs(sampleError))),np.max(abs(sampleError)),sampleTime))
+print("┗━━━━━━━━━┻━━━━━━━━━━━┻━━━━━━━━━━━┻━━━━━━━━━━━┛")
 
 

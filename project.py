@@ -44,7 +44,7 @@ data = np.random.multivariate_normal(mean, covariance, n)
 
 
 
-precision = 1e-3
+precision = 1e-4
 eps = 5e-3
 start = time.time()
 print("Calculating SN")
