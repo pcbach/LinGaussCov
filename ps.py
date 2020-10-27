@@ -61,7 +61,7 @@ def search(begin, end, precision, estimationType = 'Linear'):
     return (begin + end)/2
 
 def approximate(precision,eps,estimationType = 'Linear'):
-    file = estimationType + str(precision) + '-' + str(eps) + '.npy'
+    file = 'Type' + estimationType + '-Precision' + str(precision) + '-Epsilon' + str(eps) + '.npy'
     if os.path.isfile(os.path.join('preset', file)):
         lines  = np.load(os.path.join('preset', file))
     else:

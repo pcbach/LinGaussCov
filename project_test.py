@@ -51,7 +51,7 @@ sigma = ps.Sn(data)
 sqrt_sigma = sp.linalg.sqrtm(sigma)
 
 start = time.time()
-Problem1 = ps.LGC(X,d,precision = 1e-4, epsilon = 1e-3,estimationType = 'Cubic')
+Problem1 = ps.LGC(X,d,precision = 1e-4, epsilon = 5e-4,estimationType = 'Cubic')
 Problem1.add_constraint([(sqrt_sigma @ Problem1.X @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
 ans1 = Problem1.solve(cp.MOSEK, verbose = True)
 z1 = ans1[1]
@@ -60,7 +60,7 @@ end = time.time()
 cubicTime = end-start
 
 start = time.time()
-Problem2 = ps.LGC(X,d,precision = 1e-4, epsilon = 1e-3,estimationType = 'Linear')
+Problem2 = ps.LGC(X,d,precision = 1e-4, epsilon = 5e-4,estimationType = 'Linear')
 Problem2.add_constraint([(sqrt_sigma @ Problem2.X @ sqrt_sigma)[i,i] == 1 for i in range(d) ])
 ans2 = Problem2.solve(cp.MOSEK, verbose = True)
 z2 = ans2[1]
