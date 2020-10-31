@@ -10,3 +10,6 @@ add cubic preset
 
 28/10/20
 update cubic estimation in ps library
+
+1/11/20
+Combining test into the main ps.py and remove test files

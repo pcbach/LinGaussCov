@@ -12,6 +12,13 @@ import os
 def f(x):
     return 1/x + np.log(x)
 
+def linearLagrangeInterpolate(xa,xb):
+    M = np.array([[xa, 1],
+                  [xb, 1]])
+    B = np.array([f(xa),f(xb)])
+    A = np.linalg.solve(M, B)
+    return A
+
 def cubicLagrangeInterpolate(xa,xb,xc,xd):
     M = np.array([[xa**3, xa**2, xa, 1],
                   [xb**3, xb**2, xb, 1],
@@ -73,11 +80,7 @@ def approximate(precision,eps,estimationType = 'Linear'):
             if estimationType == 'Cubic':
                 c = [curr, next+3/4*(curr-next), next+1/4*(curr-next), next]
             else:
-                a = np.array([    [next  , 1],
-                                  [curr, 1]   ])
-                b = np.array([    f(next),
-                                  f(curr)        ])
-                c = np.linalg.solve(a, b)
+                c = linearLagrangeInterpolate(next,curr)
             lines.append(c)
             curr = next
         np.save(os.path.join('preset', file), lines)
@@ -91,7 +94,6 @@ def Sn(data):
         X = np.expand_dims(data[i], axis=0).T
         Sn += 1/n * X @ X.T
     return Sn
-
 
     
 def is_pos_def(x):
@@ -152,9 +154,11 @@ class LGC:
                 self.constraints += [self.alpha1[i] * Xi[0]  + self.alpha2[i] * Xi[1]  + self.alpha3[i] * Xi[2]  + self.alpha4[i] * Xi[3]  == self.X_[i]]
                 self.constraints += [self.alpha1[i] * Yi[0]  + self.alpha2[i] * Yi[1]  + self.alpha3[i] * Yi[2]  + self.alpha4[i] * Yi[3]  << self.Y_[i]]
                 self.constraints += [self.Z_[i] >> 0 * self.I]
-                self.constraints += [cp.sum(self.X_) == self.X]
-                self.constraints += [cp.sum(self.Y_) == self.Y]
-                self.constraints += [cp.sum(self.Z_) == self.I]
+            self.constraints += [self.X << 2*self.I]
+            self.constraints += [self.X >> self.eps*self.I]
+            self.constraints += [cp.sum(self.X_) == self.X]
+            self.constraints += [cp.sum(self.Y_) == self.Y]
+            self.constraints += [cp.sum(self.Z_) == self.I]
         else:
             a = lines[:,0]
             c = lines[:,1]
