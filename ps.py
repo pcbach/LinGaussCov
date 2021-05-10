@@ -1,3 +1,4 @@
+
 import cvxpy
 import numpy
 import scipy
@@ -101,7 +102,6 @@ def search(begin: float, end: float, delta: float, estimation_type: str = 'Linea
     pivot = begin
     while abs(begin - end) > 1e-9:
         mid = (begin + end) / 2
-
         if estimation_type == 'AltLin':
             [error, x_err] = altLinEstimatorError(pivot, mid)
             if delta_type == 'snr':
@@ -110,6 +110,7 @@ def search(begin: float, end: float, delta: float, estimation_type: str = 'Linea
             error, x_err = linearEstimatorError(pivot, mid)
             if delta_type == 'snr':
                 error = error / f(x_err)
+
 
         if error <= delta:
             begin = mid
@@ -149,7 +150,6 @@ def approximate(delta: float, begin: float, end: float,
         curr = next
     return numpy.array(lines), numpy.array(waypoint)
 
-
 def Sn(data: numpy.ndarray) -> numpy.ndarray:
     """
     return the sample covariance of data
@@ -172,6 +172,7 @@ def is_pos_def(x: numpy.ndarray) -> bool:
     :return: return true if matrix x is positive-semi-definite
     """
     return numpy.all(numpy.linalg.eigvals(x) > 0)
+
 
 
 class LGC:
