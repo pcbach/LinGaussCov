@@ -1,3 +1,4 @@
+
 import cvxpy
 import numpy
 import scipy
@@ -243,7 +244,7 @@ class LGC:
                 if j < len(lines_alt_lin)-1:
                     self.constraints += [self.X_[j] >> waypoint_alt_lin[j+1] * self.lambda_total[j]]
                 else:
-                    self.constraints += [self.X_[j] >> self.eps * self.lambda_total[j]]\
+                    self.constraints += [self.X_[j] >> self.eps * self.lambda_total[j]]
 
                 self.constraints += [self.lambda_total[j] << self.identity]
 
