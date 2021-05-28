@@ -16,3 +16,8 @@ Combining test into the main ps.py and remove test files
 
 13/05/21
 Complete Revamp
+
+28/05/21
+Separate estimation type
+Bugfix
+add comment
