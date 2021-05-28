@@ -1,4 +1,3 @@
-
 import cvxpy
 import numpy
 import scipy
@@ -102,13 +101,13 @@ def search(begin: float, end: float, delta: float, estimation_type: str = 'Linea
     pivot = begin
     while abs(begin - end) > 1e-9:
         mid = (begin + end) / 2
-
+       	# calculate error
         if estimation_type == 'AltLin':
             [error, x_err] = altLinEstimatorError(pivot, mid)
             if delta_type == 'snr':
                 error = error / f(x_err)
         else:
-            error, x_err = linearEstimatorError(pivot, mid)
+            [error, x_err] = linearEstimatorError(pivot, mid)
             if delta_type == 'snr':
                 error = error / f(x_err)
 
@@ -135,15 +134,18 @@ def approximate(delta: float, begin: float, end: float,
     lines = []
     curr = end
     waypoint.append(curr)
-    while curr > begin + 1e-9:
-        # print(curr)
+    while curr > begin + 1e-8:
         if estimation_type == 'AltLin':
+        	# find waypoints
             next = search(curr, begin, delta, 'AltLin', delta_type)
+        	# calculate parameter
             c = lineParameterLog(next, curr)
             lines.append(c)
             waypoint.append(next)
         elif estimation_type == 'Linear':
+        	# find waypoints
             next = search(curr, begin, delta, 'Linear', delta_type)
+        	# calculate parameter
             c = lineParameterF(next, curr)
             lines.append(c)
             waypoint.append(next)
@@ -177,7 +179,7 @@ def is_pos_def(x: numpy.ndarray) -> bool:
 
 class LGC:
     def __init__(self, cov: cvxpy.Variable, dimension: int, data: numpy.ndarray,
-                 delta: float = 1e-3, epsilon: float = 5e-3, mu: float = 1e-2,
+                 delta: float = 5e-4, epsilon: float = 1e-5, mu: float = 1e-2,
                  error_type: str = 'max',
                  debug: bool = False) -> None:
         """
@@ -191,6 +193,7 @@ class LGC:
         :param error_type: either 'snr' or 'max'
         :param debug: True for debug mode
         """
+        # estimation parameter
         self.dlt = delta
         self.eps = epsilon
         self.dim = dimension
@@ -198,37 +201,47 @@ class LGC:
         self.mu = mu
         self.constraints = []
         self.data = data
-        self.identity = numpy.eye(self.dim)
-        self.size = 0
         self.cov = cov
+        self.debug = debug
+        self.prob = None
+        self.time = None
+        #constant
+        self.identity = numpy.eye(self.dim)
+        # main variable
         self.X = cvxpy.Variable((self.dim, self.dim), PSD=True,name = 'X')
         self.Y = cvxpy.Variable((self.dim, self.dim),name = 'Y')
         self.t = cvxpy.Variable(name = 't')
-        self.lambda_1 = cvxpy.Variable((self.dim, self.dim),name = 'lambda 1')
+        # linear segment variable
         self.lambda_2 = cvxpy.Variable((self.dim, self.dim),name = 'lambda 2')
         self.X_2 = cvxpy.Variable((self.dim, self.dim),name = 'X 2')
         self.Y_2 = cvxpy.Variable((self.dim, self.dim),name = 'Y 2')
+        # alternate segment variable
+        self.lambda_1 = cvxpy.Variable((self.dim, self.dim),name = 'lambda 1')
         self.X_1 = cvxpy.Variable((self.dim, self.dim),name = 'X 1')
         self.Y_1 = cvxpy.Variable((self.dim, self.dim),name = 'Y 1')
         self.X_ = []
         self.lambda_total = []
         self.tau = []
         self.tau_p = []
-        self.debug = debug
-        self.prob = None
 
     def setup_constraint(self):
-        if len(self.data) > 0:
-            sigma = Sn(self.data)
-            sqrt_sigma = scipy.linalg.sqrtm(sigma)
 
-        lines_alt_lin, waypoint_alt_lin = approximate(self.dlt, self.eps, self.mu, 'AltLin', self.errorType)
-        lines_lin, waypoint_lin = approximate(self.dlt, self.mu, 2, 'Linear', self.errorType)
+    	# generate the line
+        lines_alt_lin, waypoint_alt_lin = approximate(self.dlt, self.eps, min(self.mu, 2), 'AltLin', self.errorType)
+        lines_lin, waypoint_lin = approximate(self.dlt, max(self.eps, self.mu), 2, 'Linear', self.errorType)
+        # print debug information
         if self.debug:
             print('{} alternate segments'.format(len(lines_alt_lin)))
             print('{} linear segments'.format(len(lines_lin)))
-        # setup array variables
-        if len(lines_alt_lin) > 0:
+        # Only linear segment
+        if len(lines_alt_lin) == 0:
+            a = lines_lin[:, 0]
+            c = lines_lin[:, 1]
+            # ax + b <= y
+            self.constraints += [a[i] * self.X - self.Y << -c[i] * self.identity for i in range(len(lines_lin))]
+        # Only alternate segment
+        elif len(lines_lin) == 0:
+        	# setup variable
             for j in range(len(lines_alt_lin)):
                 self.lambda_total.append(cvxpy.Variable((self.dim, self.dim),name = 'lambda_ ' + str(j)))
                 self.X_.append(cvxpy.Variable((self.dim, self.dim),name = 'X_ ' + str(j)))
@@ -239,70 +252,106 @@ class LGC:
             for j in range(len(lines_alt_lin)):
                 a = lines_alt_lin[j][0]
                 b = lines_alt_lin[j][1]
-
+                # bound on X
                 self.constraints += [self.X_[j] << waypoint_alt_lin[j] * self.lambda_total[j]]
                 if j < len(lines_alt_lin)-1:
                     self.constraints += [self.X_[j] >> waypoint_alt_lin[j+1] * self.lambda_total[j]]
                 else:
                     self.constraints += [self.X_[j] >> self.eps * self.lambda_total[j]]
-
                 self.constraints += [self.lambda_total[j] << self.identity]
-
+                # 1/x <= y'
                 self.constraints += [
                     cvxpy.bmat([[self.X_[j], self.lambda_total[j]],
                                 [self.lambda_total[j], self.tau_p[j]]])
                     >> 0 * numpy.eye(2 * self.dim)]
+                # y' + ax + b <= y
                 self.constraints += [self.tau_p[j] + a * self.X_[j] + b * self.lambda_total[j] << self.tau[j]]
+            # Convex hull
+            self.constraints += [self.lambda_1 << self.identity]
+            self.constraints += [cvxpy.sum(self.X_) == self.X]
+            self.constraints += [cvxpy.sum(self.tau) == self.Y]
+            self.constraints += [cvxpy.sum(self.lambda_total) == self.identity]
+        # Combination
+        else:
+            for j in range(len(lines_alt_lin)):
+        		# setup variable
+                self.lambda_total.append(cvxpy.Variable((self.dim, self.dim),name = 'lambda_ ' + str(j)))
+                self.X_.append(cvxpy.Variable((self.dim, self.dim),name = 'X_ ' + str(j)))
+                self.tau_p.append(cvxpy.Variable((self.dim, self.dim),name = 'tau p ' + str(j)))
+                self.tau.append(cvxpy.Variable((self.dim, self.dim),name = 'tau ' + str(j)))
 
+            # AltLin portion
+            for j in range(len(lines_alt_lin)):
+                a = lines_alt_lin[j][0]
+                b = lines_alt_lin[j][1]
+                # bound on X
+                self.constraints += [self.X_[j] << waypoint_alt_lin[j] * self.lambda_total[j]]
+                if j < len(lines_alt_lin)-1:                
+                    self.constraints += [self.X_[j] >> waypoint_alt_lin[j+1] * self.lambda_total[j]]
+                else:                
+                    self.constraints += [self.X_[j] >> self.eps * self.lambda_total[j]]
+                self.constraints += [self.lambda_total[j] << self.identity]
+                # 1/x <= y'
+                self.constraints += [
+                    cvxpy.bmat([[self.X_[j], self.lambda_total[j]],
+                                [self.lambda_total[j], self.tau_p[j]]])
+                    >> 0 * numpy.eye(2 * self.dim)]
+                # y' + ax + b <= y_1
+                self.constraints += [self.tau_p[j] + a * self.X_[j] + b * self.lambda_total[j] << self.tau[j]]
+            # Convex hull
             self.constraints += [self.lambda_1 << self.identity]
             self.constraints += [cvxpy.sum(self.X_) == self.X_1]
             self.constraints += [cvxpy.sum(self.tau) == self.Y_1]
             self.constraints += [cvxpy.sum(self.lambda_total) == self.lambda_1]
 
-        # Linear Portion
-        if len(lines_lin) > 0:
+            # linear portion
             a = lines_lin[:, 0]
             c = lines_lin[:, 1]
+            #ax + b <= y_2
             self.constraints += [a[i] * self.X_2 - self.Y_2 << -c[i] * self.lambda_2 for i in range(len(lines_lin))]
 
-        
-        self.constraints += [self.X_1 << self.lambda_1 * self.mu]
-        self.constraints += [self.X_1 >> self.lambda_1 * self.eps]
-
-        self.constraints += [self.X_2 << self.lambda_2 * 2]
-        self.constraints += [self.X_2 >> self.lambda_2 * self.mu]
-
-        if len(lines_lin) > 0 and len(lines_alt_lin) > 0:
+            # convex hull
+            self.constraints += [self.lambda_2 << self.identity]
+            self.constraints += [self.lambda_1 + self.lambda_2 == self.identity]
             self.constraints += [self.X_1 + self.X_2 == self.X]
             self.constraints += [self.Y_1 + self.Y_2 == self.Y]
-            self.constraints += [self.lambda_1 + self.lambda_2 == self.identity]
-        elif len(lines_lin) > 0 :
-            self.constraints += [self.X_2 == self.X]
-            self.constraints += [self.Y_2 == self.Y]
-            self.constraints += [self.lambda_2 == self.identity]
-        else:
-            self.constraints += [self.X_1 == self.X]
-            self.constraints += [self.Y_1 == self.Y]
-            self.constraints += [self.lambda_1 == self.identity]
 
+            self.constraints += [self.X_1 << self.lambda_1 * self.mu]
+            self.constraints += [self.X_1 >> self.lambda_1 * self.eps]
 
+            self.constraints += [self.X_2 << self.lambda_2 * 2]
+            self.constraints += [self.X_2 >> self.lambda_2 * self.mu]
 
+        # constraint on X
         self.constraints += [self.X << 2 * self.identity]
         self.constraints += [self.X >> self.eps * self.identity]
 
+        # trace constrint
         self.constraints += [cvxpy.trace(self.Y) <= self.t]
+
+        # cov constraint
         if len(self.data) > 0:
+            sigma = Sn(self.data)
+            sqrt_sigma = scipy.linalg.sqrtm(sigma)
             self.constraints += [sqrt_sigma @ self.X @ sqrt_sigma == self.cov]
         else:
             self.constraints += [self.X == self.cov]
+    # add constraint
     def add_constraint(self, constraints):
         self.constraints += constraints
 
-    def solve(self, solver=cvxpy.SCS, verbose=True):
+    # solve
+    def solve(self, solver=cvxpy.SCS, verbose=False):
         self.setup_constraint()
         self.prob = cvxpy.Problem(cvxpy.Minimize(self.t), self.constraints)
-        self.prob.solve(solver=solver, verbose=verbose)
-
-        time = self.prob.solver_stats.solve_time
-        return self.cov.value, time
+        
+        try:
+            self.prob.solve(solver=solver, verbose=verbose)
+        # exception handling
+        except Exception as e:
+            print(e)
+            print("Try another estimation parameter")
+        else:
+            self.time = self.prob.solver_stats.solve_time
+            return self.cov.value
 
